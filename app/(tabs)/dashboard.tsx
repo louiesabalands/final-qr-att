@@ -1,87 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Pressable } from 'react-native';
-import { useGlobalTheme } from '@/lib/theme';
+import React from 'react';
+import { StyleSheet, Text, View, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useAuth } from '@/lib/auth'; // Context integration
-import { getProfile, type Role } from '@/lib/profiles'; // Profile resolution
+import { COLORS } from '@/constants/colors';
 
 export default function DashboardScreen() {
-  const { darkMode } = useGlobalTheme();
   const router = useRouter();
-  const { user } = useAuth();
-  const [role, setRole] = useState<Role | null>(null);
-
-  useEffect(() => {
-    if (!user) {
-      setRole(null);
-      return;
-    }
-
-    getProfile(user.id)
-      .then((profile) => {
-        setRole(profile?.role ?? 'student');
-      })
-      .catch((error) => {
-        console.error('Error loading role in dashboard:', error);
-        setRole('student'); // Fallback safely to student limits
-      });
-  }, [user]);
-
-  const themeContainer = darkMode ? styles.darkContainer : styles.lightContainer;
-  const themeCard = darkMode ? styles.darkCard : styles.lightCard;
-  const themeMainText = darkMode ? styles.darkMainText : styles.lightMainText;
-  const themeSubText = darkMode ? styles.darkSubText : styles.lightSubText;
 
   return (
-    <View style={[styles.container, themeContainer]}>
-      {/* Header Banner */}
-      <View style={[styles.headerBanner, darkMode && styles.darkHeaderBanner]}>
-        <View style={styles.headerRow}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="person" size={28} color="#4aa9db" />
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Welcome Banner Card */}
+        <View style={styles.welcomeCard}>
+          <View style={styles.avatarGlow}>
+            <Ionicons name="person" size={28} color={COLORS.primary} />
           </View>
-          <View style={styles.headerTextWrapper}>
-            <Text style={styles.bannerTitle}>Welcome Back!</Text>
-            <Text style={styles.bannerSubtitle}>
-              {role === 'teacher' ? 'Ready to manage attendance?' : 'Track your check-in records'}
-            </Text>
+          <View style={styles.welcomeTextGroup}>
+            <Text style={styles.welcomeTitle}>Welcome Back!</Text>
+            <Text style={styles.welcomeSubtitle}>Ready to manage attendance?</Text>
           </View>
         </View>
-      </View>
 
-      <Text style={[styles.sectionTitle, themeMainText]}>Quick Actions</Text>
+        <Text style={styles.sectionHeader}>Quick Actions</Text>
 
-      {/* Action Button 1 - Visible to Everyone */}
-      <Pressable 
-        style={[styles.actionButton, themeCard]} 
-        onPress={() => router.push('/history')}
-      >
-        <Ionicons name="time-outline" size={22} color={darkMode ? '#AAA' : '#555'} />
-        <Text style={[styles.actionButtonText, themeMainText]}>Attendance History</Text>
-      </Pressable>
+        {/* Action Options List */}
+        <View style={styles.actionsList}>
+          <Pressable style={styles.actionItem} onPress={() => router.push('/history')}>
+            <Ionicons name="time-outline" size={22} color={COLORS.secondary} style={styles.actionIcon} />
+            <Text style={styles.actionText}>Attendance History</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          </Pressable>
 
-      {/* Action Button 2 - ONLY Visible to Teachers */}
-      {role === 'teacher' && (
-        <Pressable 
-          style={[styles.actionButton, themeCard]} 
-          onPress={() => router.push('/teacher')}
-        >
-          <Ionicons name="school-outline" size={22} color={darkMode ? '#AAA' : '#555'} />
-          <Text style={[styles.actionButtonText, themeMainText]}>Teacher Management</Text>
-        </Pressable>
-      )}
+          <Pressable style={styles.actionItem} onPress={() => router.push('/teacher')}>
+            <Ionicons name="clipboard-outline" size={22} color={COLORS.primary} style={styles.actionIcon} />
+            <Text style={styles.actionText}>Teacher Management</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+          </Pressable>
+        </View>
 
-      {/* Action Button 3 - ONLY Visible to Students */}
-      {role === 'student' && (
-        <Pressable 
-          style={[styles.actionButton, themeCard]} 
-          onPress={() => router.push('/scan')}
-        >
-          <Ionicons name="qr-code-outline" size={22} color={darkMode ? '#AAA' : '#555'} />
-          <Text style={[styles.actionButtonText, themeMainText]}>Scan QR Attendance</Text>
-        </Pressable>
-      )}
+      </ScrollView>
     </View>
   );
 }
@@ -89,75 +47,74 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 50,
+    backgroundColor: COLORS.background,
   },
-  lightContainer: { backgroundColor: '#FAF8F5' },
-  darkContainer: { backgroundColor: '#121212' },
-  headerBanner: {
-    backgroundColor: '#1a73e8',
+  scrollContent: {
+    padding: 24,
+    paddingTop: 40,
+  },
+  welcomeCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderWidth: 1,
     borderRadius: 20,
-    padding: 20,
-    marginBottom: 30,
-    marginTop: 10,
-  },
-  darkHeaderBanner: {
-    backgroundColor: '#1E3A8A',
-  },
-  headerRow: {
+    padding: 24,
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 32,
   },
-  iconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#FFF',
+  avatarGlow: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: COLORS.primaryGlow,
     justifyContent: 'center',
     alignItems: 'center',
+    marginRight: 16,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
+    borderWidth: 1,
   },
-  headerTextWrapper: {
-    marginLeft: 15,
+  welcomeTextGroup: {
+    flex: 1,
   },
-  bannerTitle: {
-    color: '#FFF',
+  welcomeTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: COLORS.textMain,
   },
-  bannerSubtitle: {
-    color: 'rgba(255,255,255,0.8)',
+  welcomeSubtitle: {
     fontSize: 13,
+    color: COLORS.textMuted,
     marginTop: 2,
   },
-  sectionTitle: {
-    fontSize: 16,
+  sectionHeader: {
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 15,
-    marginLeft: 4,
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 12,
+    paddingLeft: 4,
   },
-  actionButton: {
+  actionsList: {
+    gap: 12,
+  },
+  actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 16,
+    backgroundColor: COLORS.surface,
     borderWidth: 1,
-    marginBottom: 12,
+    borderColor: COLORS.border,
+    padding: 18,
+    borderRadius: 16,
   },
-  lightCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#EAEAEA',
+  actionIcon: {
+    marginRight: 14,
   },
-  darkCard: {
-    backgroundColor: '#1E1E1E',
-    borderColor: '#2D2D2D',
-  },
-  actionButtonText: {
-    fontSize: 15,
+  actionText: {
+    flex: 1,
+    fontSize: 16,
     fontWeight: '600',
-    marginLeft: 12,
+    color: COLORS.textMain,
   },
-  lightMainText: { color: '#222' },
-  darkMainText: { color: '#FFF' },
-  lightSubText: { color: '#888' },
-  darkSubText: { color: '#AAA' },
 });

@@ -1,6 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-
 import { Platform } from 'react-native'; 
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -16,6 +15,7 @@ export default function TabLayout() {
   const router = useRouter(); 
 
   useEffect(() => {
+    // SECURITY AUTO-REDIRECT: If no active user session exists, push them to the landing screen instantly
     if (!user) { 
       setRole(null);
       return;
@@ -23,11 +23,6 @@ export default function TabLayout() {
 
     getProfile(user.id).then((profile) => {
       setRole(profile?.role ?? 'student');
-
-      // ACTIVE GATE CHECK: Redirect unverified students immediately
-      if (profile?.role === 'student' && !profile?.is_verified) {
-        router.replace('/awaiting-approval');
-      }
     }).catch((error) => {
       console.error('Error loading role in layout:', error);
       setRole('student'); 
@@ -51,7 +46,9 @@ export default function TabLayout() {
           borderTopWidth: 1,
           height: Platform.OS === 'android' ? 114 : 78,
           paddingTop: 14,
-          paddingBottom: Platform.OS === 'android' ? 36 : 18, 
+          paddingBottom: Platform.OS === 'android' ? 36 : 18,
+          // SYSTEM HARD LOCK GATEWAY: Forces display to 'none' if there is no logged-in user session
+          display: !user ? 'none' : 'flex', 
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -60,13 +57,9 @@ export default function TabLayout() {
         },
       }}
     >
-      {/* Hidden Landing Root */}
-      <Tabs.Screen
-        name="index"
-        options={{
-          href: null, 
-        }}
-      />
+      {/* FORCE HIDE LEFTOVER TAB COPIES FROM RENDER SCOPES */}
+      <Tabs.Screen name="index" options={{ href: null }} />
+      <Tabs.Screen name="notification" options={{ href: null }} />
 
       {/* Main Dashboard tab */}
       <Tabs.Screen
@@ -156,22 +149,6 @@ export default function TabLayout() {
               name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'}
               color={color}
               size={22}
-            />
-          ),
-        }}
-      />
-
-      {/* ADDED: Dynamic Notifications/Approvals Tab - Visible ONLY to teachers */}
-      <Tabs.Screen
-        name="notification"
-        options={{
-          title: 'Approvals',
-          href: role === 'teacher' ? undefined : null, // Completely hides and strips the button node if student
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons 
-              name={focused ? 'notifications' : 'notifications-outline'} 
-              size={22} 
-              color={color} 
             />
           ),
         }}

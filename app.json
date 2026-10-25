@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.jomar.qrattendance"
+      "package": "com.louie.qrattendance"
     },
     "web": {
       "output": "static",
@@ -46,10 +46,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "e15382b4-a611-4a6e-8d9d-fb654b18dda8"
+        "projectId": "a97ce24a-a056-4320-94d9-3c4999d96e02"
       },
       "router": {}
-    },
-    "owner": "jomarhonoridez"
+    }
   }
 }

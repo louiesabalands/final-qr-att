@@ -1,287 +1,187 @@
-import { useFocusEffect } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { FlatList, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
-
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, ActivityIndicator } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { COLORS } from '@/constants/colors';
-import { useAuth } from '@/lib/auth';
-import { useGlobalTheme } from '@/lib/theme';
-import { getProfile, type Role } from '@/lib/profiles';
-import {
-  getAttendanceHistory,
-  getTeacherEventAttendance,
-  type AttendanceRecord,
-  type TeacherEventAttendance,
-} from '@/lib/attendance';
+import { supabase } from '@/lib/supabase';
+
+interface SchoolEvent {
+  id: string;
+  event_code: string;
+  title: string;
+  start_time: string;
+}
 
 export default function HistoryScreen() {
-  const { user } = useAuth();
-  const { darkMode } = useGlobalTheme();
-
-  const [role, setRole] = useState<Role | null>(null);
-  const [studentRecords, setStudentRecords] = useState<AttendanceRecord[]>([]);
-  const [teacherEvents, setTeacherEvents] = useState<TeacherEventAttendance[]>([]);
+  const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const themeContainer = darkMode ? styles.darkContainer : styles.lightContainer;
-  const themeCard = darkMode ? styles.darkCard : styles.lightCard;
-  const themeMainText = darkMode ? styles.darkMainText : styles.lightMainText;
-  const themeSubText = darkMode ? styles.darkSubText : styles.lightSubText;
-  const themeBorderColor = darkMode ? '#2D2D2D' : '#F3F2F2';
+  useEffect(() => {
+    async function fetchEvents() {
+      try {
+        const { data, error } = await supabase
+          .from('events')
+          .select('id, event_code, title, start_time')
+          .order('start_time', { ascending: false });
 
-  /* ---------------- BACKEND DATA FETCH LOGGER ---------------- */
-  const loadHistoryPayload = useCallback(async () => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const profile = await getProfile(user.id);
-      const currentRole: Role = profile?.role ?? 'student';
-      setRole(currentRole);
-
-      if (currentRole === 'teacher') {
-        const events = await getTeacherEventAttendance(user.id);
-        setTeacherEvents(events);
-        setStudentRecords([]);
-      } else {
-        const records = await getAttendanceHistory(user.id);
-        setStudentRecords(records);
-        setTeacherEvents([]);
+        if (error) throw error;
+        if (data) setEvents(data);
+      } catch (err) {
+        console.error('Error fetching history records:', err);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Failed to load history metrics rows:', error);
-    } finally {
-      setLoading(false);
     }
-  }, [user]);
+    fetchEvents();
+  }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadHistoryPayload();
-    }, [loadHistoryPayload])
-  );
-
-  /* ---------------- RENDER METHOD: TEACHER DATA ---------------- */
-  if (role === 'teacher') {
+  if (loading) {
     return (
-      <View style={[styles.container, themeContainer]}>
-        <Text style={[styles.pageTitle, themeMainText]}>Attendance History</Text>
-        <Text style={[styles.pageSubtitle, themeSubText]}>Track created event check-ins</Text>
-
-        {loading ? (
-          <View style={styles.centeredState}>
-            <ActivityIndicator size="small" color="#4aa9db" />
-            <Text style={[styles.subtitle, themeSubText]}>Loading events...</Text>
-          </View>
-        ) : teacherEvents.length === 0 ? (
-          <Text style={[styles.subtitle, themeSubText]}>
-            No events yet. Create an event from the Teacher tab.
-          </Text>
-        ) : (
-          <FlatList
-            data={teacherEvents}
-            keyExtractor={(item) => item.eventId}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            renderItem={({ item }) => {
-              const eventWithEndTime = item as TeacherEventAttendance & { endTime?: string };
-
-              return (
-                <View style={[styles.historyCard, themeCard]}>
-                  <View style={styles.eventHeader}>
-                    <Text style={[styles.eventTitle, themeMainText]} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countText}>{item.attendeeCount}</Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.innerDivider, { backgroundColor: themeBorderColor }]} />
-
-                  <Text style={[styles.infoText, themeSubText]}>Event Code: {item.eventCode}</Text>
-                  
-                  {item.startTime && (
-                    <Text style={[styles.infoText, themeSubText]}>Start: {formatDate(item.startTime)}</Text>
-                  )}
-                  {eventWithEndTime.endTime && (
-                    <Text style={[styles.infoText, themeSubText]}>End: {formatDate(eventWithEndTime.endTime)}</Text>
-                  )}
-
-                  {item.attendees.length === 0 ? (
-                    <Text style={styles.noAttendees}>No students have scanned yet.</Text>
-                  ) : (
-                    <View style={styles.attendeeList}>
-                      {item.attendees.map((attendee) => (
-                        <View key={`${attendee.studentId}-${attendee.scannedAt}`} style={styles.attendeeRow}>
-                          <Text style={[styles.studentIdText, themeMainText]}>{attendee.studentId}</Text>
-                          <Text style={[styles.scanTimeText, themeSubText]}> - {formatDate(attendee.scannedAt)}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              );
-            }}
-          />
-        )}
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
 
-  /* ---------------- RENDER METHOD: STUDENT DATA ---------------- */
   return (
-    <View style={[styles.container, themeContainer]}>
-      <Text style={[styles.pageTitle, themeMainText]}>Attendance History</Text>
-      <Text style={[styles.pageSubtitle, themeSubText]}>Your check-in log records</Text>
-
-      {loading ? (
-        <View style={styles.centeredState}>
-          <ActivityIndicator size="small" color="#4aa9db" />
-          <Text style={[styles.subtitle, themeSubText]}>Loading records...</Text>
-        </View>
-      ) : studentRecords.length === 0 ? (
-        <Text style={[styles.subtitle, themeSubText]}>
-          No records yet. Scan a QR code to register your attendance.
-        </Text>
-      ) : (
-        <FlatList
-          data={studentRecords}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <View style={[styles.historyCard, themeCard]}>
-              <Text style={[styles.eventTitle, themeMainText]} numberOfLines={2}>
-                {item.eventTitle}
-              </Text>
-              <View style={[styles.innerDivider, { backgroundColor: themeBorderColor }]} />
-              <Text style={[styles.infoText, themeSubText]}>Event Code: {item.eventId}</Text>
-              <Text style={[styles.infoText, themeSubText]}>Attended: {formatDate(item.scannedAt)}</Text>
+    <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.viewTitle}>Attendance Logs</Text>
+        
+        {events.length === 0 ? (
+          <View style={styles.emptyViewCard}>
+            <View style={styles.iconWrapper}>
+              <Ionicons name="calendar-outline" size={48} color={COLORS.secondary} />
             </View>
-          )}
-        />
-      )}
+            <Text style={styles.title}>Attendance History</Text>
+            <Text style={styles.subtitle}>Track created event check-ins</Text>
+            <View style={styles.infoWidget}>
+              <Text style={styles.infoText}>No events yet. Create an event from the Teacher tab.</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.listContainer}>
+            {events.map((event) => (
+              <View key={event.id} style={styles.eventItemCard}>
+                <View style={styles.eventIconIndicator}>
+                  <Ionicons name="bookmark" size={20} color={COLORS.primary} />
+                </View>
+                <View style={styles.eventDetails}>
+                  <Text style={styles.eventCardTitle}>{event.title || 'Untitled Event'}</Text>
+                  <Text style={styles.eventCardSubtitle}>Code: {event.event_code}</Text>
+                  <Text style={styles.eventCardDate}>
+                    {new Date(event.start_time).toLocaleDateString(undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
-/* ---------------- DATE UTILS FORMATTER ---------------- */
-function formatDate(iso: string) {
-  if (!iso) return 'Unknown date';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString();
-}
-
-/* ---------------- CENTRAL APPLICATION STYLESHEET ---------------- */
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 50,
+    backgroundColor: COLORS.background,
   },
-  lightContainer: { backgroundColor: '#FAF8F5' },
-  darkContainer: { backgroundColor: '#121212' },
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 10,
+  scrollContent: {
+    padding: 24,
+    paddingTop: 40,
+    width: '100%',
   },
-  pageSubtitle: {
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 24,
+  viewTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: 20,
   },
-  centeredState: {
-    marginTop: 40,
+  emptyViewCard: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    padding: 32,
     alignItems: 'center',
+  },
+  iconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(74, 169, 219, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginTop: 12,
-    paddingHorizontal: 20,
+    color: COLORS.textMuted,
+    marginBottom: 24,
   },
-  list: {
-    paddingBottom: 30,
-  },
-  historyCard: {
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 6,
-    elevation: 1,
-  },
-  lightCard: { backgroundColor: '#FFFFFF', borderColor: '#F0EFEF' },
-  darkCard: { backgroundColor: '#1E1E1E', borderColor: '#2D2D2D' },
-  lightMainText: { color: '#222' },
-  darkMainText: { color: '#FFF' },
-  lightSubText: { color: '#777' },
-  darkSubText: { color: '#AAA' },
-  eventHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    flex: 1,
-    marginRight: 10,
-  },
-  countBadge: {
-    backgroundColor: '#4aa9db',
-    minWidth: 24,
-    height: 24,
+  infoWidget: {
+    backgroundColor: COLORS.surfaceSunken,
     borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-  },
-  countText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  innerDivider: {
-    height: 1,
-    marginVertical: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderSubtle,
   },
   infoText: {
+    color: COLORS.textMuted,
     fontSize: 13,
-    marginTop: 4,
-    fontWeight: '500',
+    textAlign: 'center',
+    lineHeight: 18,
   },
-  noAttendees: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-    marginTop: 12,
+  listContainer: {
+    gap: 14,
   },
-  attendeeList: {
-    marginTop: 12,
-    paddingTop: 8,
-  },
-  attendeeRow: {
+  eventItemCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    padding: 16,
   },
-  studentIdText: {
-    fontSize: 12,
+  eventIconIndicator: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryGlow,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  eventDetails: {
+    flex: 1,
+  },
+  eventCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textMain,
+  },
+  eventCardSubtitle: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  eventCardDate: {
+    fontSize: 11,
+    color: COLORS.secondary,
     fontWeight: '600',
-  },
-  scanTimeText: {
-    fontSize: 12,
+    marginTop: 6,
   },
 });

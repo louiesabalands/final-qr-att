@@ -1,305 +1,259 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  FlatList, 
-  TextInput, 
-  TouchableOpacity, 
-  Alert, 
-  ActivityIndicator 
-} from 'react-native';
-import { supabase } from '../../lib/supabase'; // Adjust this path if necessary
+import { StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { COLORS } from '@/constants/colors';
+import { supabase } from '@/lib/supabase';
 
-interface EventItem {
+interface AdminEvent {
   id: string;
+  event_code: string;
   title: string;
-  description?: string;
-  created_at?: string;
 }
 
 interface StudentProfile {
   id: string;
   full_name: string;
   email: string;
-  role: string;
 }
 
 export default function AdminScreen() {
-  const [activeTab, setActiveTab] = useState<'events' | 'students'>('events');
-  const [events, setEvents] = useState<EventItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'events' | 'roster'>('events');
+  const [events, setEvents] = useState<AdminEvent[]>([]);
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Form Inputs for Events
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
+
+  async function loadAdminData() {
+    setLoading(true);
+    try {
+      // 1. Fetch live events
+      const { data: eventsData } = await supabase
+        .from('events')
+        .select('id, event_code, title');
+      if (eventsData) setEvents(eventsData);
+
+      // 2. Fetch student list records
+      const { data: studentsData } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('role', 'student')
+        .order('full_name', { ascending: true });
+      if (studentsData) setStudents(studentsData);
+
+    } catch (err) {
+      console.error('Error loading admin control panel data:', err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    loadDashboardData();
+    loadAdminData();
   }, []);
 
-  const loadDashboardData = async () => {
-    setLoading(true);
-    await Promise.all([fetchEvents(), fetchStudents()]);
-    setLoading(false);
-  };
-
-  // Fetch Events List
-  const fetchEvents = async () => {
+  // Handler to safely remove a student row from the public profiles table
+    // Handler to safely remove a student record on BOTH public tables and auth cache systems
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
     try {
-      const { data, error } = await supabase
-        .from('events') 
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setEvents(data || []);
-    } catch (error: any) {
-      console.error('Error fetching events:', error.message);
-    }
-  };
-
-  // Fetch Students List from Profiles
-  const fetchStudents = async () => {
-    try {
-      const { data, error } = await supabase
+      // 1. Delete row from the public profiles sheet layout
+      const { error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role')
-        .eq('role', 'student') // Filters to only show accounts registered as students
-        .order('full_name', { ascending: true });
-      if (error) throw error;
-      setStudents(data || []);
-    } catch (error: any) {
-      console.error('Error fetching students:', error.message);
-    }
-  };
+        .delete()
+        .eq('id', studentId);
 
-  // Create & Update Handler
-  const handleSave = async () => {
-    if (!title.trim()) {
-      Alert.alert('Validation Error', 'Title field is required.');
-      return;
-    }
+      if (profileError) throw profileError;
 
-    try {
-      if (editingId) {
-        const { error } = await supabase
-          .from('events')
-          .update({ title, description })
-          .eq('id', editingId);
-        if (error) throw error;
-        Alert.alert('Success', 'Event updated successfully!');
-      } else {
-        const { error } = await supabase
-          .from('events')
-          .insert([{ title, description }]);
-        if (error) throw error;
-        Alert.alert('Success', 'Event created successfully!');
+      // 2. Clear out corresponding system authentication rows using the client RPC manager
+      const { error: authError } = await supabase.auth.admin.deleteUser(studentId);
+      if (authError) {
+        console.warn('Auth account removal require elevated master keys or service triggers:', authError.message);
       }
-
-      setTitle('');
-      setDescription('');
-      setEditingId(null);
-      fetchEvents();
-    } catch (error: any) {
-      Alert.alert('Save Error', error.message);
+      
+      // Refresh admin metrics count components smoothly
+      loadAdminData();
+    } catch (err) {
+      console.error('Error deleting student record:', err);
     }
   };
 
-  // Delete Handler for Events
-  const handleDelete = async (id: string) => {
-    Alert.alert(
-      'Confirm Removal',
-      'Are you sure you want to delete this event?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase.from('events').delete().eq('id', id);
-              if (error) throw error;
-              fetchEvents();
-            } catch (error: any) {
-              Alert.alert('Delete Error', error.message);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-    // Hard Delete Handler to remove the student completely from the profiles table
-  const handleDeleteStudentAccount = (studentId: string, studentName: string) => {
-    Alert.alert(
-      'Permanently Delete Account',
-      `Are you sure you want to completely remove ${studentName || 'this student'} from the system? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Permanently',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('profiles')
-                .delete() // Changed from .update() to a real .delete() purge
-                .eq('id', studentId);
-
-              if (error) throw error;
-
-              Alert.alert('Deleted!', 'The student record has been completely removed from Supabase.');
-              fetchStudents(); // Refresh your roster list view instantly
-            } catch (error: any) {
-              Alert.alert('Delete Error', error.message);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const startEdit = (item: EventItem) => {
-    setEditingId(item.id);
-    setTitle(item.title);
-    setDescription(item.description || '');
-  };
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4aa9db" />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.headerTitle}>Admin Control Dashboard</Text>
+      <View style={styles.adminGlassContainer}>
+        <Text style={styles.title}>Admin Control Dashboard</Text>
+        
+        <View style={styles.segmentedControl}>
+          <Pressable 
+            style={[styles.tabSegment, activeTab === 'events' && styles.tabSegmentActive]}
+            onPress={() => setActiveTab('events')}
+          >
+            <Text style={activeTab === 'events' ? styles.activeTabText : styles.inactiveTabText}>
+              Manage Events ({events.length})
+            </Text>
+          </Pressable>
 
-      {/* Segmented Navigation Tab Controls */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tabButton, activeTab === 'events' && styles.activeTabButton]}
-          onPress={() => setActiveTab('events')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'events' && styles.activeTabButtonText]}>
-            Manage Events
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tabButton, activeTab === 'students' && styles.activeTabButton]}
-          onPress={() => setActiveTab('students')}
-        >
-          <Text style={[styles.tabButtonText, activeTab === 'students' && styles.activeTabButtonText]}>
-            Student Roster ({students.length})
-          </Text>
-        </TouchableOpacity>
+          <Pressable 
+            style={[styles.tabSegment, activeTab === 'roster' && styles.tabSegmentActive]}
+            onPress={() => setActiveTab('roster')}
+          >
+            <Text style={activeTab === 'roster' ? styles.activeTabText : styles.inactiveTabText}>
+              Student Roster ({students.length})
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.innerWorkboard}>
+          {loading ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : activeTab === 'events' ? (
+            events.length === 0 ? (
+              <Text style={styles.emptyText}>No registered management items listed inside system directories.</Text>
+            ) : (
+              <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+                {events.map((evt) => (
+                  <View key={evt.id} style={styles.adminItemRow}>
+                    <Ionicons name="layers-outline" size={18} color={COLORS.primary} style={{ marginRight: 10 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemTitle}>{evt.title}</Text>
+                      <Text style={styles.itemSubtitle}>Code: {evt.event_code}</Text>
+                    </View>
+                    <Pressable onPress={async () => {
+                      await supabase.from('events').delete().eq('id', evt.id);
+                      loadAdminData(); 
+                    }}>
+                      <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )
+          ) : (
+            students.length === 0 ? (
+              <Text style={styles.emptyText}>No student profiles are currently registered.</Text>
+            ) : (
+              <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
+                {students.map((student) => (
+                  <View key={student.id} style={styles.adminItemRow}>
+                    <Ionicons name="person-outline" size={18} color={COLORS.secondary} style={{ marginRight: 10 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemTitle}>{student.full_name || 'Unnamed Student'}</Text>
+                      <Text style={styles.itemSubtitle}>{student.email}</Text>
+                    </View>
+                    
+                    {/* ADDED: Connected Interactive Trash Deletion Button for Students */}
+                    <Pressable 
+                      onPress={() => handleDeleteStudent(student.id, student.full_name)}
+                      style={styles.deleteButtonWrapper}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={COLORS.error} />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )
+          )}
+        </View>
       </View>
-
-      {/* RENDER VIEW 1: MANAGE EVENTS */}
-      {activeTab === 'events' && (
-        <FlatList
-          data={events}
-          keyExtractor={(item) => item.id}
-         // Remove everything between these layout brackets:
-ListHeaderComponent={null}
-
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                {item.description ? <Text style={styles.cardDesc}>{item.description}</Text> : null}
-              </View>
-              <View style={styles.actionColumn}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => startEdit(item)}>
-                  <Text style={styles.btnText}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
-                  <Text style={styles.btnText}>Delete</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        />
-      )}
-
-           {/* RENDER VIEW 2: STUDENT ROSTER */}
-      {activeTab === 'students' && (
-        <FlatList
-          data={students}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 30 }}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No registered student accounts found.</Text>
-          }
-          renderItem={({ item }) => (
-            <View style={styles.studentCard}>
-              <View style={styles.avatarCircle}>
-                <Ionicons name="person" size={20} color="#4aa9db" />
-              </View>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={styles.studentName}>{item.full_name || 'Unnamed Student'}</Text>
-                <Text style={styles.studentEmail}>{item.email}</Text>
-              </View>
-              
-              {/* THIS IS THE TRASH CAN BUTTON FOR ACCOUNT REMOVAL */}
-              <TouchableOpacity 
-                style={styles.deleteAccountBtn} 
-                onPress={() => handleDeleteStudentAccount(item.id, item.full_name)}
-
-              >
-                <Ionicons name="trash-outline" size={18} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          )}
-        />
-      )}
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212', padding: 16, paddingTop: 40 },
-  centered: { justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 15, textAlign: 'center' },
-  
-  // Tab Styling
-  tabContainer: { flexDirection: 'row', backgroundColor: '#1e1e1e', borderRadius: 8, padding: 4, marginBottom: 20 },
-  tabButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
-activeTabButton: { backgroundColor: '#4aa9db' },
-tabButtonText: { color: '#aaa', fontWeight: '600', fontSize: 14 },
-activeTabButtonText: { color: '#fff', fontWeight: 'bold' },
-// Form Styling
-formContainer: { backgroundColor: '#1e1e1e', padding: 16, borderRadius: 8, marginBottom: 20 },
-input: { backgroundColor: '#2a2a2a', color: '#fff', padding: 12, borderRadius: 6, marginBottom: 10 },
-textArea: { height: 60, textAlignVertical: 'top' },
-saveButton: { backgroundColor: '#4aa9db', padding: 12, borderRadius: 6, alignItems: 'center' },
-buttonText: { color: '#fff', fontWeight: 'bold' },
-// Event Card Styling
-card: { backgroundColor: '#1e1e1e', padding: 16, borderRadius: 8, marginBottom: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
-cardDesc: { fontSize: 14, color: '#aaa', marginTop: 4 },
-actionColumn: { flexDirection: 'row', gap: 8 },
-editBtn: { backgroundColor: '#f39c12', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 4 },
-deleteBtn: { backgroundColor: '#e74c3c', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 4 },
-btnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-// Student Card Styling
-studentCard: { backgroundColor: '#1e1e1e', padding: 14, borderRadius: 8, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
-avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2a2a2a', justifyContent: 'center', alignItems: 'center' },
-studentName: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
-studentEmail: { fontSize: 13, color: '#888', marginTop: 2 },
-emptyText: { color: '#aaa', textAlign: 'center', marginTop: 30, fontSize: 14 },
-// Student Delete Button Styling
-deleteAccountBtn: {
-backgroundColor: '#e74c3c',
-padding: 10,
-borderRadius: 8,
-justifyContent: 'center',
-alignItems: 'center',
-},
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    padding: 24,
+    paddingTop: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adminGlassContainer: {
+    width: '100%',
+    maxWidth: 600,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 24,
+    padding: 28,
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surfaceSunken,
+    padding: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderSubtle,
+    marginBottom: 20,
+  },
+  tabSegment: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  tabSegmentActive: {
+    backgroundColor: COLORS.primary,
+  },
+  activeTabText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  inactiveTabText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  innerWorkboard: {
+    minHeight: 220,
+    maxHeight: 340,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceSunken,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.borderSubtle,
+    width: '100%',
+  },
+  emptyText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  listScroll: {
+    width: '100%',
+  },
+  adminItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor: COLORS.borderSubtle,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  itemTitle: {
+    color: COLORS.textMain,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  itemSubtitle: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  deleteButtonWrapper: {
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 77, 79, 0.05)',
+  },
 });

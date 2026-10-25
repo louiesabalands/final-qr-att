@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,18 +10,13 @@ import {
   ActivityIndicator,
   TouchableWithoutFeedback,
   Keyboard,
+  Pressable,
 } from 'react-native';
 import { Link, useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import AppButton from '@/components/AppButton';
-import Header from '@/components/Header';
-import { COLORS } from '@/constants/colors';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { signIn } from '@/lib/auth';
-import { getProfile } from '@/lib/profiles'; // IMPORTED PROFILE MATRICES
 
 export default function LoginScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,6 +25,12 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setError(null);
+
+    if (!email.trim() || !password) {
+      setError('Please fill in all fields.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -37,33 +38,21 @@ export default function LoginScreen() {
 
       if (authError) {
         setError(authError.message);
-      } else if (data?.user) {
-        // 1. Fetch user's profile details to check role and verification status
-        const profile = await getProfile(data.user.id);
-
-        // 2. BLOCK HOOK: If they are a student and not verified, redirect them immediately
-        if (profile?.role === 'student' && !profile?.is_verified) {
-          router.replace('/awaiting-approval');
-        } else {
-          // Allowed or approved users proceed safely to the system dashboard layout tabs
-          router.replace('/dashboard');
-        }
       } else {
         router.replace('/dashboard');
       }
-    } catch (err: any) {
-      setError(err?.message || 'Unexpected error');
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView
@@ -71,60 +60,78 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.headerContainer}>
-              <Header title="QR Attendance" />
-            </View>
+            <View style={styles.glassCard}>
+              
+              {/* Brand Header */}
+              <View style={styles.brandWrapper}>
+                <View style={styles.iconGlowingCircle}>
+                  <Ionicons name="school" size={38} color="#a855f7" />
+                </View>
+                <Text style={styles.mainTitle}>QR Attendance</Text>
+              </View>
 
-            <Text style={styles.title}>Welcome Back</Text>
-            <Text style={styles.subtitle}>
-              Sign in to record your attendance
-            </Text>
+              {/* View Titles */}
+              <View style={styles.titleBlock}>
+                <Text style={styles.title}>Welcome Back</Text>
+                <Text style={styles.subtitle}>Sign in to record your attendance</Text>
+              </View>
 
-            <View style={styles.form}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="your.email@school.edu"
-                placeholderTextColor={COLORS.textSecondary}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                editable={!loading}
-              />
-
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                style={styles.input}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Enter your password"
-                placeholderTextColor={COLORS.textSecondary}
-                secureTextEntry
-                editable={!loading}
-              />
-
-              {error && <Text style={styles.error}>{error}</Text>}
-
-              {loading ? (
-                <ActivityIndicator
-                  size="large"
-                  color={COLORS.primary}
-                  style={styles.loader}
+              {/* Sign In Form */}
+              <View style={styles.form}>
+                <Text style={styles.label}>Email Address</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="enter.your@email.com"
+                  placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  editable={!loading}
                 />
-              ) : (
-                <AppButton
-                  theme="primary"
-                  title="Sign In"
-                  icon="log-in-outline"
-                  onPress={handleLogin}
-                />
-              )}
-            </View>
 
-            <Link href="/register" style={styles.link}>
-              Don't have an account? Sign Up
-            </Link>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  editable={!loading}
+                />
+
+                {error && <Text style={styles.errorText}>{error}</Text>}
+
+                {loading ? (
+                  <ActivityIndicator
+                    size="large"
+                    color="#a855f7"
+                    style={styles.loader}
+                  />
+                ) : (
+                  <Pressable
+                    style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
+                    onPress={handleLogin}
+                  >
+                    <Ionicons name="log-in-outline" size={20} color="#fff" style={styles.btnIcon} />
+                    <Text style={styles.primaryBtnText}>Sign In</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* Registration Link Anchor */}
+              <View style={styles.footerRow}>
+                <Text style={styles.footerText}>Don't have an account? </Text>
+                <Link href="/register" asChild>
+                  <Pressable>
+                    <Text style={styles.linkText}>Sign Up</Text>
+                  </Pressable>
+                </Link>
+              </View>
+
+            </View>
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -135,68 +142,138 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#111026', 
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   keyboardView: {
     flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  headerContainer: {
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 16,
+    padding: 24,
+    width: '100%', // Fixed width compile error here
+  },
+  glassCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)', 
+    borderRadius: 24,
+    padding: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)', 
+    shadowColor: '#a855f7',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+  },
+  brandWrapper: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  iconGlowingCircle: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: 'rgba(168, 85, 247, 0.15)', 
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
+  },
+  mainTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
+  titleBlock: {
+    marginBottom: 24,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: '#ffffff',
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    lineHeight: 21,
-    marginBottom: 32,
+    fontSize: 14,
+    color: '#94a3b8',
   },
   form: {
-    marginBottom: 24,
+    width: '100%',
+    gap: 16,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginBottom: 6,
-    marginTop: 10,
+    color: '#cbd5e1',
+    marginBottom: -8,
   },
   input: {
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    color: '#ffffff',
     fontSize: 16,
-    color: COLORS.textPrimary,
-    marginBottom: 5,
   },
-  error: {
+  errorText: {
+    color: '#ff4d4f',
     fontSize: 14,
-    color: COLORS.danger,
-    textAlign: 'left',
-    marginTop: 12,
-    marginBottom: 4,
+    textAlign: 'center',
+    marginTop: 4,
   },
   loader: {
-    marginVertical: 16,
+    marginVertical: 12,
   },
-  link: {
+  primaryBtn: {
+    flexDirection: 'row',
+    backgroundColor: '#a855f7', 
+    paddingVertical: 15,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#a855f7',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    marginTop: 8,
+  },
+  btnPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.985 }],
+  },
+  primaryBtnText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  btnIcon: {
+    marginRight: 8,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 28,
+  },
+  footerText: {
+    color: '#94a3b8',
     fontSize: 14,
-    color: COLORS.primary,
-    textAlign: 'center',
-    fontWeight: '600',
+  },
+  linkText: {
+    color: '#a855f7',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,17 +12,16 @@ import {
   Keyboard,
   Pressable,
 } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { supabase } from '@/lib/supabase';
-
-import AppButton from '@/components/AppButton';
-import Header from '@/components/Header';
-import { COLORS } from '@/constants/colors';
 import { signUp } from '@/lib/auth';
+import { COLORS } from '@/constants/colors';
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<'student' | 'teacher'>('student');
@@ -33,7 +32,7 @@ export default function RegisterScreen() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-   const handleRegister = async () => {
+  const handleRegister = async () => {
     setError(null);
 
     if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
@@ -53,7 +52,8 @@ export default function RegisterScreen() {
 
     setLoading(true);
 
-    try {
+        try {
+      // 1. Fire the core sign up sequence
       const { data, error: authError } = await signUp(
         email.trim(),
         password,
@@ -65,45 +65,23 @@ export default function RegisterScreen() {
 
       if (authError) {
         setError(authError.message);
-      } else {
-        // AUTOMATED HOOK: Create a pending approval log if a student registers
-        if (data?.user && role === 'student') {
-          const { error: requestError } = await supabase
-            .from('verification_requests')
-            .insert([
-              {
-                student_id: data.user.id,
-                student_name: fullName.trim(),
-                student_email: email.trim(),
-                status: 'pending'
-              }
-            ]);
-
-          if (requestError) {
-            console.error('Error logging validation request payload:', requestError);
-          }
-        }
-
-        if (data?.session) {
-          setSuccess(false);
-        } else {
-          setSuccess(true);
-        }
+      } else if (data?.user) {
+        // 2. SUCCESS PATH: Bypassed verification database insertions completely
+        setSuccess(true);
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
 
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <ScrollView
@@ -111,137 +89,131 @@ export default function RegisterScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.headerContainer}>
-              <Header title="QR Attendance" />
-            </View>
-
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
-              Register to start recording attendance
-            </Text>
-
-            {success ? (
-              <View style={styles.successContainer}>
-                <Text style={styles.successTitle}>Check your email!</Text>
-                <Text style={styles.successText}>
-                  We sent a confirmation link to {email}. Click the link to
-                  verify your account, then come back and sign in.
-                </Text>
-                <Link href="/login" style={styles.link}>
-                  Back to Sign In
-                </Link>
-              </View>
-            ) : (
-              <View style={styles.form}>
-                <Text style={styles.label}>Full Name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={fullName}
-                  onChangeText={setFullName}
-                  placeholder="Enter your full name"
-                  placeholderTextColor={COLORS.textSecondary}
-                  autoCapitalize="words"
-                  editable={!loading}
-                />
-
-                <Text style={styles.label}>I am a...</Text>
-
-                <View style={styles.roleRow}>
-                  <Pressable
-                    style={[
-                      styles.roleChip,
-                      role === 'student' && styles.roleChipActive,
-                    ]}
-                    onPress={() => setRole('student')}
-                    disabled={loading}
-                  >
-                    <Text
-                      style={[
-                        styles.roleChipText,
-                        role === 'student' && styles.roleChipTextActive,
-                      ]}
-                    >
-                      Student
-                    </Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.roleChip,
-                      role === 'teacher' && styles.roleChipActive,
-                    ]}
-                    onPress={() => setRole('teacher')}
-                    disabled={loading}
-                  >
-                    <Text
-                      style={[
-                        styles.roleChipText,
-                        role === 'teacher' && styles.roleChipTextActive,
-                      ]}
-                    >
-                      Teacher
-                    </Text>
-                  </Pressable>
+            <View style={styles.glassCard}>
+              
+              <View style={styles.brandWrapper}>
+                <View style={styles.iconGlowingCircle}>
+                  <Ionicons name="school" size={38} color="#a855f7" />
                 </View>
-
-                <Text style={styles.label}>Email</Text>
-                <TextInput
-                  style={styles.input}
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="your.email@school.edu"
-                  placeholderTextColor={COLORS.textSecondary}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  editable={!loading}
-                />
-
-                <Text style={styles.label}>Password</Text>
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="At least 6 characters"
-                  placeholderTextColor={COLORS.textSecondary}
-                  secureTextEntry
-                  editable={!loading}
-                />
-
-                <Text style={styles.label}>Confirm Password</Text>
-                <TextInput
-                  style={styles.input}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="Re-enter your password"
-                  placeholderTextColor={COLORS.textSecondary}
-                  secureTextEntry
-                  editable={!loading}
-                />
-
-                {error && <Text style={styles.error}>{error}</Text>}
-
-                {loading ? (
-                  <ActivityIndicator
-                    size="large"
-                    color={COLORS.primary}
-                    style={styles.loader}
-                  />
-                ) : (
-                  <AppButton
-                    theme="primary"
-                    title="Sign Up"
-                    icon="person-add-outline"
-                    onPress={handleRegister}
-                  />
-                )}
+                <Text style={styles.mainTitle}>QR Attendance</Text>
               </View>
-            )}
 
-            {!success && (
-              <Link href="/login" style={styles.link}>
-                Already have an account? Sign In
-              </Link>
-            )}
+              <Text style={styles.title}>Create Account</Text>
+              <Text style={styles.subtitle}>Register to start recording attendance</Text>
+
+              {success ? (
+                <View style={styles.successContainer}>
+                  <Ionicons name="checkmark-circle-outline" size={64} color="#52c41a" style={{ marginBottom: 12 }} />
+                  <Text style={styles.successTitle}>Registration Successful!</Text>
+                  <Text style={styles.successText}>
+                    Your account has been created and auto-approved. You can now proceed to login.
+                  </Text>
+                  <Link href="/login" asChild>
+                    <Pressable style={styles.primaryBtn}>
+                      <Text style={styles.primaryBtnText}>Back to Sign In</Text>
+                    </Pressable>
+                  </Link>
+                </View>
+              ) : (
+                <View style={styles.form}>
+                  <Text style={styles.label}>Full Name</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={fullName}
+                    onChangeText={setFullName}
+                    placeholder="Enter your full name"
+                    placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    autoCapitalize="words"
+                    editable={!loading}
+                  />
+
+                  <Text style={styles.label}>I am a...</Text>
+                  <View style={styles.roleRow}>
+                    <Pressable
+                      style={[styles.roleChip, role === 'student' && styles.roleChipActive]}
+                      onPress={() => setRole('student')}
+                      disabled={loading}
+                    >
+                      <Text style={[styles.roleChipText, role === 'student' && styles.roleChipTextActive]}>
+                        Student
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.roleChip, role === 'teacher' && styles.roleChipActive]}
+                      onPress={() => setRole('teacher')}
+                      disabled={loading}
+                    >
+                      <Text style={[styles.roleChipText, role === 'teacher' && styles.roleChipTextActive]}>
+                        Teacher
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.label}>Email Address</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="your.email@school.edu"
+                    placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    editable={!loading}
+                  />
+
+                  <Text style={styles.label}>Password</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="At least 6 characters"
+                    placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                  />
+
+                  <Text style={styles.label}>Confirm Password</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    placeholder="Re-enter your password"
+                    placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    secureTextEntry
+                    autoCapitalize="none"
+                    editable={!loading}
+                  />
+
+                  {error && <Text style={styles.errorText}>{error}</Text>}
+
+                  {loading ? (
+                    <ActivityIndicator size="large" color="#a855f7" style={styles.loader} />
+                  ) : (
+                    <Pressable
+                      style={({ pressed }) => [styles.primaryBtn, pressed && styles.btnPressed]}
+                      onPress={handleRegister}
+                    >
+                      <Ionicons name="person-add-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                      <Text style={styles.primaryBtnText}>Sign Up</Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+
+              {!success && (
+                <View style={styles.footerRow}>
+                  <Text style={styles.footerText}>Already have an account? </Text>
+                  <Link href="/login" asChild>
+                    <Pressable>
+                      <Text style={styles.linkText}>Sign In</Text>
+                    </Pressable>
+                  </Link>
+                </View>
+              )}
+
+            </View>
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
@@ -252,115 +224,171 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: '#111026',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   keyboardView: {
     flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  headerContainer: {
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 16,
+    padding: 24,
+    width: '100%',
+  },
+  glassCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 24,
+    padding: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  brandWrapper: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  iconGlowingCircle: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: 'rgba(168, 85, 247, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.3)',
+  },
+  mainTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.5,
   },
   title: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    color: '#fff',
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
-    lineHeight: 21,
-    marginBottom: 32,
+    fontSize: 14,
+    color: '#94a3b8',
+    marginBottom: 24,
   },
   form: {
-    marginBottom: 24,
+    width: '100%',
+    gap: 16,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: COLORS.textPrimary,
-    marginBottom: 6,
-    marginTop: 10,
+    color: '#cbd5e1',
+    marginBottom: -8,
   },
   input: {
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    marginBottom: 5,
-  },
-  roleRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 4,
-  },
-  roleChip: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    backgroundColor: COLORS.card,
-  },
-  roleChipActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '14',
-  },
-  roleChipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-  },
-  roleChipTextActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  error: {
-    fontSize: 14,
-    color: COLORS.danger,
-    textAlign: 'left',
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  loader: {
-    marginVertical: 16,
-  },
-  link: {
-    fontSize: 14,
-    color: COLORS.primary,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  successContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-    padding: 20,
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-  },
-  successTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 8,
-  },
-  successText: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 16,
-  },
+borderColor: 'rgba(255, 255, 255, 0.1)',
+color: '#fff',
+fontSize: 16,
+},
+roleRow: {
+flexDirection: 'row',
+gap: 12,
+marginTop: 4,
+},
+roleChip: {
+flex: 1,
+paddingVertical: 12,
+borderRadius: 12,
+borderWidth: 1,
+borderColor: 'rgba(255, 255, 255, 0.12)',
+alignItems: 'center',
+backgroundColor: 'rgba(15, 23, 42, 0.4)',
+},
+roleChipActive: {
+backgroundColor: 'rgba(168, 85, 247, 0.15)',
+borderColor: '#a855f7',
+},
+roleChipText: {
+fontSize: 15,
+color: '#94a3b8',
+fontWeight: '600',
+},
+roleChipTextActive: {
+color: '#fff',
+fontWeight: '700',
+},
+errorText: {
+color: '#ff4d4f',
+fontSize: 14,
+textAlign: 'center',
+marginTop: 4,
+},
+loader: {
+marginVertical: 12,
+},
+primaryBtn: {
+flexDirection: 'row',
+backgroundColor: '#a855f7',
+paddingVertical: 15,
+borderRadius: 14,
+justifyContent: 'center',
+alignItems: 'center',
+marginTop: 8,
+width: '100%',
+},
+btnPressed: {
+opacity: 0.9,
+transform: [{ scale: 0.985 }],
+},
+primaryBtnText: {
+color: '#ffffff',
+fontSize: 16,
+fontWeight: '700',
+letterSpacing: 0.2,
+},
+footerRow: {
+flexDirection: 'row',
+justifyContent: 'center',
+alignItems: 'center',
+marginTop: 28,
+},
+footerText: {
+color: '#94a3b8',
+fontSize: 14,
+},
+linkText: {
+color: '#a855f7',
+fontSize: 14,
+fontWeight: '700',
+},
+successContainer: {
+alignItems: 'center',
+paddingVertical: 12,
+width: '100%',
+},
+successTitle: {
+fontSize: 20,
+fontWeight: '700',
+color: '#fff',
+marginBottom: 8,
+},
+successText: {
+fontSize: 14,
+color: '#94a3b8',
+textAlign: 'center',
+lineHeight: 20,
+marginBottom: 24,
+},
 });
